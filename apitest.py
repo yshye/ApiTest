@@ -1,3 +1,4 @@
+import os
 import time
 from flask import Flask, request, session, g, redirect, url_for, \
     abort, render_template, flash
@@ -5,8 +6,13 @@ import json
 from contextlib import closing
 import sqlite3
 
+import werkzeug   # 获取上传文件的文件名
+
 DATABASE = "./apitest.db"
 DEBUG = True
+
+UPLOAD_FOLDER = './upload'
+ALLOWED_EXTENSIONS = set(['txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc'])  # 允许上传的文件类型
 
 server = Flask(__name__)
 server.config.from_object(__name__)
@@ -72,6 +78,22 @@ def register():
         return error('注册失败，请重试！')
     cur = query_db('select id,name from users where name =?', [name], True)
     return success(cur, '注册成功！')
+
+
+def allowed_file(filename):
+    # 验证上传的文件名是否符合要求，文件名必须带点并且符合允许上传的文件类型要求，两者都满足则返回 true
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1] in ALLOWED_EXTENSIONS
+
+
+@server.post('/upload_file')
+def upload_file():
+    file = request.files['file']   # 获取上传的文件
+    if file and allowed_file(file.filename):   # 如果文件存在并且符合要求则为 true
+        filename = werkzeug.secure_filename(file.filename)   # 获取上传文件的文件名
+        file.save(os.path.join(server.config['UPLOAD_FOLDER'], filename))   # 保存文件
+        return success(f'{filename} 上传成功！')   # 返回保存成功的信息
+    return error('文件类型不符合！')
 
 
 def success(data, msg=''):
