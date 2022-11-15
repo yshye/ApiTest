@@ -1,8 +1,13 @@
+# -*- coding:UTF-8 -*-
+
 import os
-from flask import Flask, request, g
+import uuid
+
+from flask import Flask, request, g, jsonify
 import json
 # from contextlib import closing
 import sqlite3
+from flask_cors import *
 
 DATABASE = "./apitest.db"
 DEBUG = True
@@ -11,18 +16,15 @@ UPLOAD_FOLDER = './upload'
 ALLOWED_EXTENSIONS = set(['txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc'])  # 允许上传的文件类型
 
 server = Flask(__name__)
+server.config['JSON_AS_ASCII'] = False
+server.config['JSONIFY_MIMETYPE'] = "application/json;charset=utf-8"
 server.config.from_object(__name__)
+
+CORS(server)
 
 
 def connect_db():
     return sqlite3.connect(server.config['DATABASE'])
-
-
-# def init_db():
-#     with closing(connect_db()) as db:
-#         with server.open_resource('db.sql') as f:
-#             db.cursor().executescript(f.read())
-#         db.commit()
 
 
 @server.before_request
@@ -50,7 +52,7 @@ def login():
         return error('用户名不可为空！')
     if pwd is None:
         return error("密码不可为空！")
-    cur = query_db("select id,name,email,label,sex,remark from users where name = ? and pwd = ?", [name, pwd], one=True)
+    cur = query_db("select token from users where name = ? and pwd = ?", [name, pwd], one=True)
     if cur is None:
         return error('用户名或密码错误！')
     return success(cur, '登陆成功')
@@ -58,7 +60,7 @@ def login():
 
 @server.get("/users")
 def user_list():
-    cur = query_db("select id,name,email,label,sex,remark from users")
+    cur = query_db("select name from users")
     return success(cur)
 
 
@@ -80,8 +82,9 @@ def register():
     cur = query_db('select id from users where name = ?', [name], one=True)
     if cur is not None:
         return error(f"{name}已经存在，不可以再注册！")
-    cur = g.db.execute('insert into users (name, pwd,email,sex,label,remark) values (?, ?,?,?,?,?)',
-                       [name, pwd, email, sex, label, remark])
+    token = str(uuid.uuid4().hex)
+    cur = g.db.execute('insert into users (name, pwd,email,sex,label,remark,token) values (?, ?,?,?,?,?,?)',
+                       [name, pwd, email, sex, label, remark, token])
     g.db.commit()
     if cur is None:
         return error('注册失败，请重试！')
@@ -89,14 +92,14 @@ def register():
     return success(cur, '注册成功！')
 
 
-@server.put("/update/<int:uid>")
-def update(uid):
+@server.put("/update/<string:token>")
+def update(token):
     # 修改用户信息
-    if uid is None:
-        return error("用户Id不可为空！")
-    cur = query_db("select id ,email,label,remark,sex,pwd from users where id = ?", [uid], one=True)
+    if token is None:
+        return error("用户token不可为空！")
+    cur = query_db("select id ,email,label,remark,sex,pwd from users where token = ?", [token], one=True)
     if cur is None:
-        return error("不存在改用户！")
+        return error("不存在该用户！")
     data = request.data
     values = json.loads(data)
     pwd = values.get('pwd') if 'pwd' in values else cur['pwd']
@@ -104,22 +107,33 @@ def update(uid):
     remark = values.get("remark") if 'remark' in values else cur['remark']
     sex = values['sex'] if ('sex' in values) else cur['sex']
     label = values.get("label") if 'label' in values else cur['label']
-    cur = g.db.execute("update users set email=?,label=?,sex=?,pwd=?,remark=? where id = ?",
-                       [email, label, sex, pwd, remark, uid])
+    cur = g.db.execute("update users set email=?,label=?,sex=?,pwd=?,remark=? where token = ?",
+                       [email, label, sex, pwd, remark, token])
     g.db.commit()
     if cur is None:
         return error("修改失败，请重试！")
     return success(msg='修改成功！')
 
 
-@server.delete("/user/delete/<int:uid>")
-def delete(uid):
-    if uid is None:
-        return error("用户Id不可为空！")
-    cur = query_db("select id from users where id = ?", [uid], one=True)
+@server.get("/user/info/<string:token>")
+def user_info(token):
+    if token is None:
+        return error("用户token不可为空！")
+    cur = query_db("select id from users where token = ?", [token], one=True)
     if cur is None:
-        return error("不存在改用户！")
-    cur = g.db.execute("delete from users where id = ?", [uid])
+        return error("不存在该用户！")
+    cur = query_db('select id,name,email,label,sex,remark from users where token =?', [token], True)
+    return success(cur, '获取用户信息成功！')
+
+
+@server.delete("/user/delete/<string:token>")
+def delete(token):
+    if token is None:
+        return error("用户token不可为空！")
+    cur = query_db("select id from users where token = ?", [token], one=True)
+    if cur is None:
+        return error("不存在该用户！")
+    cur = g.db.execute("delete from users where token = ?", [token])
     g.db.commit()
     if cur is None:
         return error("删除失败！")
@@ -143,11 +157,11 @@ def upload_file():
 
 
 def success(data=None, msg=''):
-    return json.dumps({'data': data, 'code': 200, 'msg': msg})
+    return jsonify({'data': data, 'code': 200, 'msg': msg})
 
 
 def error(msg: str, code=0):
-    return json.dumps({'data': None, 'code': code, 'msg': msg})
+    return jsonify({'data': None, 'code': code, 'msg': msg})
 
 
 def query_db(query, args=(), one=False):
@@ -158,4 +172,4 @@ def query_db(query, args=(), one=False):
 
 
 if __name__ == "__main__":
-    server.run(port=6000, debug=True)
+    server.run(host='0.0.0.0', port=6000)
