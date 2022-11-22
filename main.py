@@ -115,6 +115,52 @@ def update(token):
     return success(msg='修改成功！')
 
 
+@server.post("/user/update/<string:token>")
+def update_from_data(token):
+    # 修改用户信息
+    if token is None:
+        return error("用户token不可为空！")
+    cur = query_db("select id ,email,label,remark,sex,pwd from users where token = ?", [token], one=True)
+    if cur is None:
+        return error("不存在该用户！")
+    from_data = request.form
+    keys = from_data.keys()
+    pwd = from_data.get('pwd') if 'pwd' in keys else cur['pwd']
+    name = from_data.get('name') if 'name' in keys else cur['name']
+    email = from_data.get('email') if 'email' in keys else cur['email']
+    label = from_data.get('label') if 'label' in keys else cur['label']
+    sex = from_data.get('sex') if 'sex' in keys else cur['sex']
+    remark = from_data.get('remark') if 'remark' in keys else cur['remark']
+    cur = g.db.execute("update users set email=?,label=?,sex=?,pwd=?,remark=? where token = ?",
+                       [email, label, sex, pwd, remark, token])
+    g.db.commit()
+    if cur is None:
+        return error("修改失败，请重试！")
+    return success(msg='修改成功！')
+
+
+@server.post("/user/any/<string:token>")
+def any_user(token):
+    if token is None:
+        return error("用户token不可为空！")
+    cur = query_db("select id ,email,label,remark,sex,pwd from users where token = ?", [token], one=True)
+    if cur is None:
+        return error("token无效！")
+    data = request.data
+    values = json.loads(data)
+    data = values['data']
+    if data is None:
+        return error("缺少data数据！")
+    re = []
+    for item in data:
+        name = item['name']
+        if name is None:
+            return error("data数据结构错误！")
+        cur = query_db('select id from users where name = ?', [name], True)
+        re.append({'name': name, 'any': cur is not None})
+    return success(re, '查询成功')
+
+
 @server.get("/user/info/<string:token>")
 def user_info(token):
     if token is None:
