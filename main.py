@@ -13,7 +13,7 @@ DATABASE = "./apitest.db"
 DEBUG = True
 
 UPLOAD_FOLDER = './upload'
-ALLOWED_EXTENSIONS = set(['txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc'])  # 允许上传的文件类型
+ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc'}  # 允许上传的文件类型
 
 server = Flask(__name__)
 server.config['JSON_AS_ASCII'] = False
@@ -126,7 +126,7 @@ def update_from_data(token):
     from_data = request.form
     keys = from_data.keys()
     pwd = from_data.get('pwd') if 'pwd' in keys else cur['pwd']
-    name = from_data.get('name') if 'name' in keys else cur['name']
+    # name = from_data.get('name') if 'name' in keys else cur['name']
     email = from_data.get('email') if 'email' in keys else cur['email']
     label = from_data.get('label') if 'label' in keys else cur['label']
     sex = from_data.get('sex') if 'sex' in keys else cur['sex']
